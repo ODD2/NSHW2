@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 		struct sockaddr_in addr;
 		uint len = sizeof(addr);
 		SSL *ssl;
-		const char reply[] = "test\n";
+		const char reply[] = "test";
 
 		int client = accept(sock, (struct sockaddr*) &addr, &len);
 		if (client < 0) {

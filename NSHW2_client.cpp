@@ -26,21 +26,17 @@ int connect_socket(const char server_ip[], int port) {
 	addr.sin_port = htons(port);
 	addr.sin_addr.s_addr = inet_addr(server_ip);
 
-	s = socket(AF_INET, SOCK_STREAM, 0);
-
-	if (s < 0) {
+	if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		PERROR("Unable to create socket");
 		exit(EXIT_FAILURE);
 	}
 
-	int c = connect(s, (struct sockaddr*) &addr, sizeof(addr));
-
-	if (c == -1) {
+	if (connect(s, (struct sockaddr*) &addr, sizeof(addr)) == -1) {
 		PERROR("Connection error");
 		exit(EXIT_FAILURE);
 	}
 
-	return c;
+	return s;
 }
 
 int main(int argc, char **argv) {
@@ -59,7 +55,7 @@ int main(int argc, char **argv) {
 	ssl = SSL_new(ctx);
 	SSL_set_fd(ssl, con_fd);
 
-	if (SSL_connect(ssl)  != 1) {
+	if (SSL_connect(ssl) != 1) {
 		PERROR("SSL Connection Failed")
 		ERR_print_errors_fp(stderr);
 		exit(EXIT_FAILURE);
@@ -67,7 +63,7 @@ int main(int argc, char **argv) {
 	PINFO("SSL Connection Success");
 
 	SSL_read(ssl, buffer, BUF_LEN);
-	PINFO("SSL reads: [" << buffer << "]");
+	PINFO("SSL reads: \n[" << buffer << "]");
 
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
