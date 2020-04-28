@@ -68,9 +68,17 @@ void configure_context(SSL_CTX *ctx, const char cert_loc[],
 }
 
 void close_ssl(SSL *ssl) {
-	SSL_shutdown(ssl);
+	int err_code = 0;
+	SSL_get_error(ssl,err_code);
+
+	if(!( err_code == SSL_ERROR_SYSCALL ||err_code == SSL_ERROR_SSL)){
+		PINFO("SSL Shutdown.");
+		SSL_shutdown(ssl);
+	}
+
+	PINFO("SSL Free.");
 	SSL_free(ssl);
-	PINFO("SSL Connection Shutdown & Free.");
+
 }
 
 int verify_callback(int preverify, X509_STORE_CTX *x509_ctx) {

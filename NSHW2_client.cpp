@@ -19,6 +19,7 @@
 #include <iostream>
 #include <thread>
 #include <string>
+#include <string.h>
 
 using namespace std;
 
@@ -43,18 +44,16 @@ int connect_socket(const char server_ip[], int port) {
 	return s;
 }
 
-
-
 int main(int argc, char **argv) {
 	int con_fd = 0;
 	SSL_CTX *ctx;
 	SSL *ssl;
-	char buffer[BUF_LEN] = { 0 };
+	char buf_c2s[BUF_LEN] = { 0 };
+	char buf_recv[BUF_LEN] = { 0 };
 
 	init_openssl();
 	ctx = create_context();
 	configure_context(ctx, "./client/cert.pem", "./client/key.pem");
-
 
 	con_fd = connect_socket(TLS_SERVER_IP, TLS_SERVER_PORT);
 	PINFO("Connected to Server.")
@@ -68,37 +67,90 @@ int main(int argc, char **argv) {
 		exit(EXIT_FAILURE);
 	}
 	PINFO("SSL Connection Success");
+	SSL_read(ssl, buf_recv, BUF_LEN);
+	cout << buf_recv << endl;
 
-//	SSL_read(ssl, buffer, BUF_LEN);
-//	PINFO("SSL reads: \n[" << buffer << "]");
-
-	int epollfd = epoll_create1(0);
-	epoll_event ev, read_evs[MAX_EPOLL_EVENTS];
-
-	while(1 ){
-		if(!(cin >> buffer))
-		{
-			PERROR("Cannot get command from stdin.")
-			exit(EXIT_FAILURE);
-		}
-
-//		if(strlen(buffer)<BUF_LEN-2){
-//			buffer[strlen(buffer)] = '\n';
-//			buffer[strlen(buffer)] = '\0';
+//	char buffer[BUF_LEN]={0};
+//	cin.getline(buffer,BUF_LEN-1);
+//	buffer[strlen(buffer)] = '\n';
+//	SSL_write(ssl,buffer,BUF_LEN);
+//
+//	memset(buffer,'\0',BUF_LEN);
+//
+//	ssize_t ret= 0;
+//	while((ret= SSL_read(ssl,buffer,BUF_LEN))!=-1){
+//		if(ret > 0){
+//			cout << buffer <<endl;
+//			break;
 //		}
+//	}
 
-		buffer[strlen(buffer)] = '\n';
-		if(SSL_write(ssl,buffer,BUF_LEN)<0){
-			PERROR("Connection Closed(Writing).")
-			exit(EXIT_FAILURE);
-		}
+//	SSL_write( ssl,"hello",5);
 
-		if(SSL_read(ssl,buffer,BUF_LEN)<0){
-			PERROR("Connection Closed(Reading).")
-			exit(EXIT_FAILURE);
-		}
-		cout << buffer;
+	int epollfd = epoll_create1(0), nfds = 0;
+	epoll_event ev, ready_evs[MAX_EPOLL_EVENTS];
+
+	{
+		ev.events = EPOLLIN | EPOLLOUT;
+		ev.data.fd = con_fd;
+		epoll_ctl(epollfd, EPOLL_CTL_ADD, con_fd, &ev);
 	}
+
+	{
+		ev.events = EPOLLIN;
+		ev.data.fd = STDIN_FILENO;
+		epoll_ctl(epollfd, EPOLL_CTL_ADD, STDIN_FILENO, &ev);
+	}
+
+	while (1) {
+		nfds = epoll_wait(epollfd, ready_evs, MAX_EPOLL_EVENTS, -1);
+		if (nfds == -1) {
+			PERROR("Epoll wait error.")
+			break;
+		}
+
+		for (int n = 0; n < nfds; ++n) {
+			int ready_fd = ready_evs[n].data.fd;
+			unsigned int code = ready_evs[n].events;
+			if (code & EPOLLERR || code & EPOLLRDHUP) {
+				goto EPOLL_END;
+			}
+
+			if (ready_fd == con_fd) {
+				if ((code & EPOLLIN)) {
+					ssize_t recv_size = SSL_read(ssl, buf_recv, BUF_LEN-1);
+					//					super weird condition.
+					//					epoll told me there were data in file descriptor, but read nothing.
+					//					suppose this descriptor is broken?
+					//					even the event codes above didn't detect the error.
+					if (recv_size == 0) {
+						goto EPOLL_END;
+					}
+					else{
+						buf_recv[recv_size] = '\0';
+						cout << buf_recv;
+					}
+				}
+				if ((code & EPOLLOUT) > 0 && strlen(buf_c2s) > 0) {
+					ssize_t orig_size = strlen(buf_c2s);
+					ssize_t send_size = SSL_write(ssl, buf_c2s, orig_size);
+					if (orig_size < send_size) {
+						ssize_t rem_size = orig_size - send_size;
+						memcpy(buf_c2s, &buf_c2s[send_size], rem_size);
+						buf_c2s[rem_size] = '\0';
+					} else {
+						memset(buf_c2s, '\0', BUF_LEN);
+					}
+				}
+			} else if (ready_fd == STDIN_FILENO) {
+				ssize_t orig_size = strlen(buf_c2s);
+				ssize_t rem_size = BUF_LEN - orig_size;
+				cin.getline(&buf_c2s[orig_size], rem_size - 1);
+				buf_c2s[strlen(buf_c2s)] = '\n';
+			}
+		}
+	}
+	EPOLL_END:
 
 	close_ssl(ssl);
 
@@ -107,3 +159,4 @@ int main(int argc, char **argv) {
 	close(con_fd);
 	PINFO("Connection Closed. (fd:" << con_fd << ")")
 }
+

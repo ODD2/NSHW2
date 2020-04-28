@@ -73,11 +73,11 @@ void bash_driver(int (&S2B)[2], int (&B2S)[2]) {
 //
 //	}
 
-	PINFO("Create bash")
+//	PINFO("Create bash")
 //	system("/bin/bash");
-	execlp("bash", "/bin/bash",NULL);
+	execlp("bash", "/bin/bash", NULL);
 //	system("/bin/bash");
-	PINFO("Program End")
+//	PINFO("Program End")
 	exit(0);
 }
 
@@ -103,7 +103,7 @@ int socket_driver(SSL *ssl, int client, int (&S2B)[2], int (&B2S)[2]) {
 	}
 
 	{
-		ev.events = EPOLLIN | EPOLLOUT;
+		ev.events = EPOLLIN;
 		ev.data.fd = B2S[0];
 		if (epoll_ctl(epollfd, EPOLL_CTL_ADD, B2S[0], &ev) == -1) {
 			PERROR("Cannot Add Shell to Bash FD Into Epoll");
@@ -112,7 +112,7 @@ int socket_driver(SSL *ssl, int client, int (&S2B)[2], int (&B2S)[2]) {
 	}
 
 	{
-		ev.events = EPOLLIN|EPOLLOUT;
+		ev.events = EPOLLIN | EPOLLOUT;
 		ev.data.fd = client;
 		if (epoll_ctl(epollfd, EPOLL_CTL_ADD, client, &ev) == -1) {
 			PERROR("Cannot Add Client FD Into Epoll");
@@ -135,12 +135,12 @@ int socket_driver(SSL *ssl, int client, int (&S2B)[2], int (&B2S)[2]) {
 		for (int n = 0; n < nfds; ++n) {
 			int ready_fd = ready_events[n].data.fd;
 			unsigned int code = ready_events[n].events;
-//			PINFO("Socket Ready:" <<ready_fd)
+			//PINFO("Socket Ready:" <<ready_fd)
 
 			//Check fd event code
-			if(code & EPOLLERR){
-				PINFO("Connection Error/Closed. Ending Service. (fd:"<<ready_fd<<")")
-				return 0;
+			if ((code & EPOLLERR) || (code & EPOLLRDHUP) || (code & EPOLLHUP)) {
+				PINFO("Connection Closed. Ending Service. (fd:"<<ready_fd<<")")
+				goto EPOLL_END;
 			}
 
 			//
@@ -153,8 +153,9 @@ int socket_driver(SSL *ssl, int client, int (&S2B)[2], int (&B2S)[2]) {
 							remain_size);
 					char_s2b_array[remain_size] = 0;
 				} else if (send_size == total_size) {
-					PINFO("Client command sent to bash. : ["<< char_s2b_array << "]")
-					memset(char_s2b_array,'\0',BUF_LEN);
+					PINFO(
+							"Client command sent to bash. : ["<< char_s2b_array << "]")
+					memset(char_s2b_array, '\0', BUF_LEN);
 				}
 			} else if (ready_fd == B2S[0] && strlen(char_s2c_array) < BUF_LEN) {
 				ssize_t initial_size = strlen(char_s2c_array);
@@ -169,7 +170,15 @@ int socket_driver(SSL *ssl, int client, int (&S2B)[2], int (&B2S)[2]) {
 					remain_size = BUF_LEN - strlen(char_s2b_array);
 					read_size = SSL_read(ssl, &char_s2b_array[initial_size],
 							remain_size);
-					PINFO("Client command received: [" << &char_s2b_array[initial_size] << "]");
+					PINFO(
+							"Client command received: [" << &char_s2b_array[initial_size] << "] (size:" << read_size << ")");
+//					super weird condition.
+//					epoll told me there were data in file descriptor, but read nothing.
+//					suppose this descriptor is broken?
+//					even the event codes above didn't detect the error.
+					if (read_size == 0) {
+						goto EPOLL_END;
+					}
 				}
 				if ((code & EPOLLOUT) > 0 && strlen(char_s2c_array) > 0) {
 					total_size = strlen(char_s2c_array);
@@ -181,13 +190,15 @@ int socket_driver(SSL *ssl, int client, int (&S2B)[2], int (&B2S)[2]) {
 						char_s2c_array[remain_size] = 0;
 						PINFO("Bash return sent partial data to client.");
 					} else if (send_size == total_size) {
-						PINFO("Bash return sent to client: [" << char_s2c_array <<"]");
-						memset(char_s2c_array,'\0',BUF_LEN);
+						PINFO(
+								"Bash return sent to client: [" << char_s2c_array <<"]");
+						memset(char_s2c_array, '\0', BUF_LEN);
 					}
 				}
 			}
 		}
 	}
+	EPOLL_END: close(epollfd);
 }
 
 int client_handler(int client, SSL_CTX *ctx) {
@@ -203,6 +214,7 @@ int client_handler(int client, SSL_CTX *ctx) {
 		ret = -1;
 	} else {
 		PINFO("SSL Accepted.");
+		SSL_write(ssl, "SSL BEGIN.", 10);
 
 		int S2B[2], B2S[2];
 		//Create pipe for bash
@@ -217,8 +229,6 @@ int client_handler(int client, SSL_CTX *ctx) {
 			exit(EXIT_FAILURE);
 			break;
 		case 0:
-			close_ssl(ssl);
-//			delete ssl;
 			close(client);
 
 			bash_driver(S2B, B2S);
@@ -226,15 +236,14 @@ int client_handler(int client, SSL_CTX *ctx) {
 			break;
 		default:
 			socket_driver(ssl, client, S2B, B2S);
-//			SSL_write(ssl, reply, strlen(reply));
-//			PINFO("SSL Write: \n[" << reply <<"]");
 			break;
 		}
+
+		close_ssl(ssl);
+		close(client);
+		PINFO("Connection Closed. (fd:" << client << ")")
+		return ret;
 	}
-	close_ssl(ssl);
-	close(client);
-	PINFO("Connection Closed. (fd:" << client << ")")
-	return ret;
 }
 
 int main(int argc, char **argv) {
