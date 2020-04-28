@@ -16,12 +16,13 @@ void init_openssl() {
 	PINFO("SSL Initialized.");
 }
 
-void cleanup_openssl() {
+void cleanup_openssl(SSL_CTX *ctx) {
+	SSL_CTX_free(ctx);
 	EVP_cleanup();
 	PINFO("SSL Cleaned.");
 }
 
-SSL_CTX* create_context(bool server) {
+SSL_CTX* create_context() {
 	const SSL_METHOD *method;
 	SSL_CTX *ctx;
 	//set method to tls method. equivalent to SSLv23_method();
@@ -66,13 +67,19 @@ void configure_context(SSL_CTX *ctx, const char cert_loc[],
 	PINFO("SSL Context Configured.");
 }
 
+void close_ssl(SSL *ssl) {
+	SSL_shutdown(ssl);
+	SSL_free(ssl);
+	PINFO("SSL Connection Shutdown & Free.");
+}
+
 int verify_callback(int preverify, X509_STORE_CTX *x509_ctx) {
 	int depth = X509_STORE_CTX_get_error_depth(x509_ctx);
 	int err = X509_STORE_CTX_get_error(x509_ctx);
 	if (err) {
-		PINFO("Verification Error.(depth:"<<depth << ", msg:" << get_validation_errstr(err) << ")")
-	}
-	else {
+		PINFO(
+				"Verification Error.(depth:"<<depth << ", msg:" << get_validation_errstr(err) << ")")
+	} else {
 		X509 *cert = X509_STORE_CTX_get_current_cert(x509_ctx);
 		char *iname = X509_NAME_oneline(X509_get_issuer_name(cert), NULL, 0);
 		char *sname = X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0);

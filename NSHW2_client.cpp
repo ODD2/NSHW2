@@ -15,7 +15,11 @@
 #include <openssl/err.h>
 #include "ssl_helper.h"
 #include "GLOBAL.h"
+#include <sys/epoll.h>
 #include <iostream>
+#include <thread>
+#include <string>
+
 using namespace std;
 
 int connect_socket(const char server_ip[], int port) {
@@ -48,7 +52,7 @@ int main(int argc, char **argv) {
 	char buffer[BUF_LEN] = { 0 };
 
 	init_openssl();
-	ctx = create_context(false);
+	ctx = create_context();
 	configure_context(ctx, "./client/cert.pem", "./client/key.pem");
 
 
@@ -65,17 +69,41 @@ int main(int argc, char **argv) {
 	}
 	PINFO("SSL Connection Success");
 
-	SSL_read(ssl, buffer, BUF_LEN);
-	PINFO("SSL reads: \n[" << buffer << "]");
+//	SSL_read(ssl, buffer, BUF_LEN);
+//	PINFO("SSL reads: \n[" << buffer << "]");
 
-	SSL_shutdown(ssl);
-	SSL_free(ssl);
-	PINFO("SSL Connection Shut down & Free.");
+	int epollfd = epoll_create1(0);
+	epoll_event ev, read_evs[MAX_EPOLL_EVENTS];
 
-	SSL_CTX_free(ctx);
-	cleanup_openssl();
-	PINFO("SSL Context Cleaned.");
+	while(1 ){
+		if(!(cin >> buffer))
+		{
+			PERROR("Cannot get command from stdin.")
+			exit(EXIT_FAILURE);
+		}
+
+//		if(strlen(buffer)<BUF_LEN-2){
+//			buffer[strlen(buffer)] = '\n';
+//			buffer[strlen(buffer)] = '\0';
+//		}
+
+		buffer[strlen(buffer)] = '\n';
+		if(SSL_write(ssl,buffer,BUF_LEN)<0){
+			PERROR("Connection Closed(Writing).")
+			exit(EXIT_FAILURE);
+		}
+
+		if(SSL_read(ssl,buffer,BUF_LEN)<0){
+			PERROR("Connection Closed(Reading).")
+			exit(EXIT_FAILURE);
+		}
+		cout << buffer;
+	}
+
+	close_ssl(ssl);
+
+	cleanup_openssl(ctx);
 
 	close(con_fd);
-	PINFO("Close Socket Connection.");
+	PINFO("Connection Closed. (fd:" << con_fd << ")")
 }

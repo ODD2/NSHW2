@@ -4,7 +4,7 @@ LIBS = -lssl -lcrypto
 
 TARGET = NSHW2_server NSHW2_client
 
-COMMON_OBJS = ssl_helper.o
+COMMON_OBJS = ssl_helper.o GLOBAL.o
 
 all: $(TARGET)
 

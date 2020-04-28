@@ -19,13 +19,15 @@
 void init_openssl();
 
 //clean up ssl
-void cleanup_openssl();
+void cleanup_openssl(SSL_CTX* ctx);
 
 //create context for ssl
-SSL_CTX* create_context(bool server);
+SSL_CTX* create_context();
 
 //configure the context for ssl
 void configure_context(SSL_CTX*, const char[], const char[]);
+
+void close_ssl(SSL* ssl);
 
 //the verification call back. called during verification, prints issuer and subject information.
 int verify_callback(int preverify, X509_STORE_CTX* x509_ctx);

@@ -11,6 +11,10 @@
 
 #include <stdio.h>
 #include <iostream>
+#include <csignal>
+#include <unistd.h>
+#include <sys/wait.h>
+
 using namespace std;
 
 
@@ -24,5 +28,11 @@ using namespace std;
 
 #define TLS_SERVER_PORT 5000
 #define TLS_SERVER_IP "127.0.0.1"
+
+#define MAX_EPOLL_EVENTS 20
+
+int forkm();
+
+
 
 #endif /* GLOBAL_H_ */
