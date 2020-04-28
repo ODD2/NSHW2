@@ -39,6 +39,8 @@ int connect_socket(const char server_ip[], int port) {
 	return s;
 }
 
+
+
 int main(int argc, char **argv) {
 	int con_fd = 0;
 	SSL_CTX *ctx;
@@ -48,6 +50,7 @@ int main(int argc, char **argv) {
 	init_openssl();
 	ctx = create_context(false);
 	configure_context(ctx, "./client/cert.pem", "./client/key.pem");
+
 
 	con_fd = connect_socket(TLS_SERVER_IP, TLS_SERVER_PORT);
 	PINFO("Connected to Server.")
@@ -67,10 +70,12 @@ int main(int argc, char **argv) {
 
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
-
-	close(con_fd);
+	PINFO("SSL Connection Shut down & Free.");
 
 	SSL_CTX_free(ctx);
-
 	cleanup_openssl();
+	PINFO("SSL Context Cleaned.");
+
+	close(con_fd);
+	PINFO("Close Socket Connection.");
 }
