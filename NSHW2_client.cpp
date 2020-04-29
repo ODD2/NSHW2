@@ -70,23 +70,6 @@ int main(int argc, char **argv) {
 	SSL_read(ssl, buf_recv, BUF_LEN);
 	cout << buf_recv << endl;
 
-//	char buffer[BUF_LEN]={0};
-//	cin.getline(buffer,BUF_LEN-1);
-//	buffer[strlen(buffer)] = '\n';
-//	SSL_write(ssl,buffer,BUF_LEN);
-//
-//	memset(buffer,'\0',BUF_LEN);
-//
-//	ssize_t ret= 0;
-//	while((ret= SSL_read(ssl,buffer,BUF_LEN))!=-1){
-//		if(ret > 0){
-//			cout << buffer <<endl;
-//			break;
-//		}
-//	}
-
-//	SSL_write( ssl,"hello",5);
-
 	int epollfd = epoll_create1(0), nfds = 0;
 	epoll_event ev, ready_evs[MAX_EPOLL_EVENTS];
 
